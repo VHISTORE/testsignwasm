@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WASM Signer Test</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #03080f; color: white; padding: 20px; }
+        .container { max-width: 400px; margin: 0 auto; background: #141928; padding: 20px; border-radius: 12px; }
+        input, button { width: 100%; margin-bottom: 15px; padding: 10px; border-radius: 8px; border: none; }
+        button { background: #00ccff; color: #000; font-weight: bold; cursor: pointer; }
+        #status { font-size: 14px; color: #30d158; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>URSA WASM Signer</h2>
+    
+    <label>IPA File:</label>
+    <input type="file" id="ipa-file" accept=".ipa">
+
+    <label>P12 Certificate:</label>
+    <input type="file" id="p12-file" accept=".p12">
+
+    <label>Provisioning Profile:</label>
+    <input type="file" id="prov-file" accept=".mobileprovision">
+
+    <label>P12 Password:</label>
+    <input type="text" id="p12-password" placeholder="Certificate password">
+
+    <button id="sign-btn">SIGN APP</button>
+
+    <div id="status"></div>
+</div>
+
+<script src="signer.js"></script>
+<script src="main.js"></script>
+
+</body>
+</html>

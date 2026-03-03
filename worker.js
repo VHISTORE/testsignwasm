@@ -13,7 +13,17 @@ self.onmessage = async function(e) {
         zsignModule.FS.writeFile('prov.mobileprovision', new Uint8Array(provData));
 
         self.postMessage({ type: 'status', msg: '3/4 Signing (CPU is working hard)...' });
-        const args = ['-k', 'cert.p12', '-p', password, '-m', 'prov.mobileprovision', '-o', 'signed.ipa', 'app.ipa'];
+        
+        // ВАЖНО: Добавили флаги -b (Bundle ID) и -n (Имя приложения), чтобы они совпадали с install.plist
+        const args = [
+            '-k', 'cert.p12', 
+            '-p', password, 
+            '-m', 'prov.mobileprovision', 
+            '-b', 'com.ursa.signed',
+            '-n', 'URSA Mod',
+            '-o', 'signed.ipa', 
+            'app.ipa'
+        ];
         
         // Запуск C++ движка
         zsignModule.callMain(args);

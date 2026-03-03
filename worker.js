@@ -4,31 +4,30 @@ self.onmessage = async function(e) {
     const { ipaData, p12Data, provData, password } = e.data;
 
     try {
-        self.postMessage({ type: 'status', msg: '1/4 Initializing WASM...' });
+        self.postMessage({ type: 'status', msg: '1/4 Initializing WASM Engine...' });
         const zsignModule = await createZSignModule();
 
-        self.postMessage({ type: 'status', msg: '2/4 Preparing Virtual FS...' });
+        self.postMessage({ type: 'status', msg: '2/4 Loading files to Virtual FS...' });
         zsignModule.FS.writeFile('app.ipa', new Uint8Array(ipaData));
         zsignModule.FS.writeFile('cert.p12', new Uint8Array(p12Data));
         zsignModule.FS.writeFile('prov.mobileprovision', new Uint8Array(provData));
 
         self.postMessage({ type: 'status', msg: '3/4 Signing with Force flags...' });
         
-        // Добавили -f для принудительной перезаписи и -z 9 для сжатия
-        // Убрали -b и -n, чтобы не ломать структуру сертификата
+        // Используем только -f (принудительно) и -z 9 (сжатие)
+        // Мы НЕ меняем Bundle ID здесь, чтобы не сломать подпись сертификата
         const args = [
             '-k', 'cert.p12', 
             '-p', password, 
             '-m', 'prov.mobileprovision', 
-            '-f', 
-            '-z', '9',
+            '-f', // Force sign
             '-o', 'signed.ipa', 
             'app.ipa'
         ];
         
         zsignModule.callMain(args);
 
-        self.postMessage({ type: 'status', msg: '4/4 Extracting IPA...' });
+        self.postMessage({ type: 'status', msg: '4/4 Extracting signed file...' });
         const signedIpaData = zsignModule.FS.readFile('signed.ipa');
         const safeData = signedIpaData.slice();
 

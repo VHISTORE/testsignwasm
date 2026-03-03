@@ -1,3 +1,6 @@
+// Запускаем фоновый процесс
+const worker = new Worker('worker.js');
+
 document.getElementById('sign-btn').addEventListener('click', async () => {
     const ipaFile = document.getElementById('ipa-file').files[0];
     const p12File = document.getElementById('p12-file').files[0];
@@ -12,49 +15,60 @@ document.getElementById('sign-btn').addEventListener('click', async () => {
     }
 
     statusEl.style.color = "#00ccff";
-    statusEl.innerText = "1/4 Initializing WASM Engine...";
+    statusEl.innerText = "Reading files... (UI remains responsive!)";
 
     try {
-        // Инициализируем модуль zsign (исходя из того самого кода, который ты показал на скрине)
-        const zsignModule = await createZSignModule();
+        // Читаем файлы
+        const ipaData = await ipaFile.arrayBuffer();
+        const p12Data = await p12File.arrayBuffer();
+        const provData = await provFile.arrayBuffer();
 
-        statusEl.innerText = "2/4 Reading files into memory...";
-        const ipaData = new Uint8Array(await ipaFile.arrayBuffer());
-        const p12Data = new Uint8Array(await p12File.arrayBuffer());
-        const provData = new Uint8Array(await provFile.arrayBuffer());
+        // Сохраняем имя файла для итогового скачивания
+        window.currentIpaName = ipaFile.name;
 
-        statusEl.innerText = "3/4 Loading files to Virtual File System...";
-        zsignModule.FS.writeFile('app.ipa', ipaData);
-        zsignModule.FS.writeFile('cert.p12', p12Data);
-        zsignModule.FS.writeFile('prov.mobileprovision', provData);
+        // Отправляем сырые данные в фоновый Worker
+        worker.postMessage({
+            ipaData: ipaData,
+            p12Data: p12Data,
+            provData: provData,
+            password: password
+        }, [ipaData, p12Data, provData]); // Transferable objects - передаем права на память, чтобы не дублировать ее
 
-        statusEl.innerText = "4/4 Signing in progress (don't close tab)...";
-        // Параметры для команды подписи
-        const args = ['-k', 'cert.p12', '-p', password, '-m', 'prov.mobileprovision', '-o', 'signed.ipa', 'app.ipa'];
-        
-        // Запуск!
-        zsignModule.callMain(args);
+    } catch (error) {
+        statusEl.innerText = "Error reading files.";
+        statusEl.style.color = "red";
+    }
+});
 
-        statusEl.innerText = "Preparing download...";
-        const signedIpaData = zsignModule.FS.readFile('signed.ipa');
+// Слушаем ответы от фонового процесса
+worker.onmessage = function(e) {
+    const statusEl = document.getElementById('status');
+    const { type, msg, data } = e.data;
 
-        // Скачиваем готовый файл
-        const blob = new Blob([signedIpaData.buffer], { type: 'application/octet-stream' });
+    if (type === 'status') {
+        // Обновляем текст статуса
+        statusEl.innerText = msg;
+    } 
+    else if (type === 'error') {
+        statusEl.style.color = "red";
+        statusEl.innerText = "Error: " + msg + "\n(Check password and cert)";
+    } 
+    else if (type === 'done') {
+        // Получили готовый файл!
+        statusEl.style.color = "#30d158";
+        statusEl.innerText = "Success! Preparing download...";
+
+        // Создаем файл и качаем
+        const blob = new Blob([data], { type: 'application/octet-stream' });
         const downloadUrl = URL.createObjectURL(blob);
         
         const a = document.createElement('a');
         a.href = downloadUrl;
-        a.download = `URSA_${ipaFile.name}`;
+        a.download = `URSA_${window.currentIpaName}`;
         document.body.appendChild(a);
         a.click();
         a.remove();
         
-        statusEl.style.color = "#30d158";
-        statusEl.innerText = "Success! Signed IPA downloaded.";
-
-    } catch (error) {
-        console.error("Signing failed:", error);
-        statusEl.style.color = "red";
-        statusEl.innerText = "Error during signing! Check console (F12) for details.";
+        statusEl.innerText = "Downloaded!";
     }
-});
+};

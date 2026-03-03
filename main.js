@@ -1,10 +1,14 @@
 const worker = new Worker('worker.js');
 
-// Твои конфиги из админки
+// Конфиги GoFile из твоей админки
 const GOFILE_TOKEN = "1CXC2VQ263Z4TctNDGiWkE935MnTki35"; 
 const ROOT_FOLDER_ID = "f6473757-cc2b-42b4-bb4e-99d4b8d3429c"; 
 
-// Твоя функция генерации прямой ссылки
+// Переменные для хранения данных об аппке (достаем из логов WASM)
+let detectedBundleId = "com.ursa.signed";
+let detectedAppName = "URSA Mod";
+
+// Функция генерации прямой ссылки GoFile
 async function createAndGetDirectLink(contentId, retryCount = 0) {
     try {
         const response = await fetch(`https://api.gofile.io/contents/${contentId}/directlinks`, {
@@ -37,7 +41,7 @@ async function createAndGetDirectLink(contentId, retryCount = 0) {
     } catch (e) { return null; }
 }
 
-// Адаптированная загрузка Blob-файла (WASM выдает нам Blob, а не File)
+// Загрузка на GoFile
 function uploadBlobToGoFile(blob, filename, statusEl) {
     return new Promise((resolve, reject) => {
         const formData = new FormData();
@@ -50,28 +54,26 @@ function uploadBlobToGoFile(blob, filename, statusEl) {
 
         xhr.upload.onprogress = (e) => {
             const percent = Math.round((e.loaded / e.total) * 100);
-            statusEl.innerText = `Uploading ${filename}: ${percent}%`;
+            statusEl.innerText = `Uploading to CDN: ${percent}%`;
         };
 
         xhr.onload = async function() {
             try {
                 const res = JSON.parse(xhr.responseText);
                 if (res.status === "ok") {
-                    statusEl.innerText = `Fetching Direct Link for ${filename}...`;
+                    statusEl.innerText = `Finalizing link...`;
                     await new Promise(r => setTimeout(r, 2000));
                     const directUrl = await createAndGetDirectLink(res.data.id);
-                    resolve(directUrl || res.data.downloadPage);
-                } else {
-                    reject("Upload Error from GoFile");
-                }
-            } catch (e) { reject("JSON Parse Error"); }
+                    resolve(directUrl);
+                } else { reject("GoFile Error"); }
+            } catch (e) { reject("Parse Error"); }
         };
         xhr.onerror = () => reject("Network Error");
         xhr.send(formData);
     });
 }
 
-// Запуск подписи
+// Клик по кнопке
 document.getElementById('sign-btn').addEventListener('click', async () => {
     const ipaFile = document.getElementById('ipa-file').files[0];
     const p12File = document.getElementById('p12-file').files[0];
@@ -80,8 +82,7 @@ document.getElementById('sign-btn').addEventListener('click', async () => {
     const statusEl = document.getElementById('status');
 
     if (!ipaFile || !p12File || !provFile || !password) {
-        statusEl.innerText = "Error: Please provide all files and password!";
-        statusEl.style.color = "red";
+        alert("Заполни все поля!");
         return;
     }
 
@@ -103,18 +104,27 @@ document.getElementById('sign-btn').addEventListener('click', async () => {
         }, [ipaData, p12Data, provData]);
 
     } catch (error) {
-        statusEl.innerText = "Error reading files.";
-        statusEl.style.color = "red";
+        statusEl.innerText = "Read error.";
     }
 });
 
-// Слушаем воркер и грузим на GoFile
+// Логика Воркера
 worker.onmessage = async function(e) {
     const statusEl = document.getElementById('status');
     const { type, msg, data } = e.data;
 
     if (type === 'status') {
         statusEl.innerText = msg;
+        
+        // Авто-детект данных из логов zsign
+        if (msg.includes("BundleId:")) {
+            detectedBundleId = msg.split("BundleId:")[1].trim();
+            console.log("Detected ID:", detectedBundleId);
+        }
+        if (msg.includes("AppName:")) {
+            detectedAppName = msg.split("AppName:")[1].trim();
+            console.log("Detected Name:", detectedAppName);
+        }
     } 
     else if (type === 'error') {
         statusEl.style.color = "red";
@@ -124,17 +134,13 @@ worker.onmessage = async function(e) {
         try {
             statusEl.style.color = "#00ccff";
             
-            // 1. Грузим подписанный IPA
             const signedIpaBlob = new Blob([data], { type: 'application/octet-stream' });
-            const ipaDirectUrl = await uploadBlobToGoFile(signedIpaBlob, `URSA_Signed_${window.currentIpaName}`, statusEl);
+            const ipaDirectUrl = await uploadBlobToGoFile(signedIpaBlob, `URSA_${window.currentIpaName}`, statusEl);
 
-            if (!ipaDirectUrl || !ipaDirectUrl.endsWith('.ipa')) {
-                throw new Error("GoFile did not return a valid direct .ipa link.");
-            }
+            if (!ipaDirectUrl) throw new Error("Could not get Direct Link");
 
-            statusEl.innerText = "Generating Plist...";
+            statusEl.innerText = "Creating manifest...";
 
-            // 2. Генерируем Plist с нашей новой ссылкой
             const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -154,32 +160,31 @@ worker.onmessage = async function(e) {
             <key>metadata</key>
             <dict>
                 <key>bundle-identifier</key>
-                <string>com.ursa.signed</string>
+                <string>${detectedBundleId}</string>
                 <key>bundle-version</key>
                 <string>1.0</string>
                 <key>kind</key>
                 <string>software</string>
                 <key>title</key>
-                <string>URSA Mod</string>
+                <string>${detectedAppName}</string>
             </dict>
         </dict>
     </array>
 </dict>
 </plist>`;
 
-            // 3. Грузим Plist на GoFile
             const plistBlob = new Blob([plistContent], { type: 'application/x-plist' });
             const plistDirectUrl = await uploadBlobToGoFile(plistBlob, 'install.plist', statusEl);
 
-            // 4. УСТАНАВЛИВАЕМ
             statusEl.style.color = "#30d158";
-            statusEl.innerText = "Success! Look for the install popup.";
+            statusEl.innerText = "Done! Click Install on popup.";
+            
+            // Запуск установки
             window.location.href = `itms-services://?action=download-manifest&url=${plistDirectUrl}`;
 
         } catch (err) {
-            console.error(err);
             statusEl.style.color = "red";
-            statusEl.innerText = "Upload failed: " + err;
+            statusEl.innerText = "Failed: " + err;
         }
     }
 };

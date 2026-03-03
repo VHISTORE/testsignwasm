@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WASM Signer Test</title>
+    <title>URSA WASM Signer</title>
     <style>
         body { font-family: -apple-system, sans-serif; background: #03080f; color: white; padding: 20px; }
         .container { max-width: 400px; margin: 0 auto; background: #141928; padding: 20px; border-radius: 12px; }
-        input, button { width: 100%; margin-bottom: 15px; padding: 10px; border-radius: 8px; border: none; }
-        button { background: #00ccff; color: #000; font-weight: bold; cursor: pointer; }
-        #status { font-size: 14px; color: #30d158; text-align: center; }
+        input, button { width: 100%; margin-bottom: 15px; padding: 10px; border-radius: 8px; border: none; box-sizing: border-box; background: rgba(255,255,255,0.1); color: white; }
+        button { background: #00ccff; color: #000; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        button:active { transform: scale(0.98); }
+        #status { font-size: 14px; color: #30d158; text-align: center; margin-top: 10px; white-space: pre-wrap; }
     </style>
 </head>
 <body>
@@ -29,12 +30,12 @@
     <label>P12 Password:</label>
     <input type="text" id="p12-password" placeholder="Certificate password">
 
-    <button id="sign-btn">SIGN APP</button>
+    <button id="sign-btn">SIGN ON DEVICE</button>
 
-    <div id="status"></div>
+    <div id="status">Waiting for files...</div>
 </div>
 
-<script src="signer.js"></script>
+<script src="zsign.js"></script>
 <script src="main.js"></script>
 
 </body>

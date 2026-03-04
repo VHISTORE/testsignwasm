@@ -23,6 +23,7 @@ self.onmessage = async function(e) {
 
         self.postMessage({ type: 'status', msg: '3/4 Signing with Force flags...' });
         
+        // Никакого сжатия (-z) и никаких подмен ID (-b). Только чистая принудительная подпись (-f).
         const args = [
             '-k', 'cert.p12', 
             '-p', password, 

@@ -5,7 +5,16 @@ self.onmessage = async function(e) {
 
     try {
         self.postMessage({ type: 'status', msg: '1/4 Initializing WASM Engine...' });
-        const zsignModule = await createZSignModule();
+        
+        // ВАЖНО: Подключаемся к "консоли" WASM движка и отправляем текст в main.js
+        const zsignModule = await createZSignModule({
+            print: function(text) {
+                self.postMessage({ type: 'stdout', msg: text });
+            },
+            printErr: function(text) {
+                self.postMessage({ type: 'stderr', msg: text });
+            }
+        });
 
         self.postMessage({ type: 'status', msg: '2/4 Loading files to Virtual FS...' });
         zsignModule.FS.writeFile('app.ipa', new Uint8Array(ipaData));
@@ -14,13 +23,11 @@ self.onmessage = async function(e) {
 
         self.postMessage({ type: 'status', msg: '3/4 Signing with Force flags...' });
         
-        // Используем только -f (принудительно) и -z 9 (сжатие)
-        // Мы НЕ меняем Bundle ID здесь, чтобы не сломать подпись сертификата
         const args = [
             '-k', 'cert.p12', 
             '-p', password, 
             '-m', 'prov.mobileprovision', 
-            '-f', // Force sign
+            '-f', 
             '-o', 'signed.ipa', 
             'app.ipa'
         ];

@@ -6,7 +6,6 @@ self.onmessage = async function(e) {
     try {
         self.postMessage({ type: 'status', msg: '1/4 Initializing WASM Engine...' });
         
-        // ВАЖНО: Подключаемся к "консоли" WASM движка и отправляем текст в main.js
         const zsignModule = await createZSignModule({
             print: function(text) {
                 self.postMessage({ type: 'stdout', msg: text });
@@ -23,12 +22,12 @@ self.onmessage = async function(e) {
 
         self.postMessage({ type: 'status', msg: '3/4 Signing with Force flags...' });
         
-        // Никакого сжатия (-z) и никаких подмен ID (-b). Только чистая принудительная подпись (-f).
         const args = [
             '-k', 'cert.p12', 
             '-p', password, 
             '-m', 'prov.mobileprovision', 
             '-f', 
+            '-z', '9',
             '-o', 'signed.ipa', 
             'app.ipa'
         ];

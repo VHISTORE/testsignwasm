@@ -1,5 +1,4 @@
 const worker = new Worker('worker.js');
-
 const GOFILE_TOKEN = "1CXC2VQ263Z4TctNDGiWkE935MnTki35"; 
 const ROOT_FOLDER_ID = "f6473757-cc2b-42b4-bb4e-99d4b8d3429c"; 
 
@@ -81,7 +80,6 @@ document.getElementById('sign-btn').addEventListener('click', async () => {
         alert("Fill all fields!"); return;
     }
 
-    // Сбрасываем старые значения перед новой подписью
     detectedBundleId = "";
     detectedAppName = "";
     
@@ -111,17 +109,18 @@ worker.onmessage = async function(e) {
         statusEl.innerText = msg;
     } 
     else if (type === 'stdout') {
-        // ВОТ ОНО! Читаем логи напрямую из C++
         console.log("WASM: " + msg);
-        if (msg.includes("BundleId:")) {
-            detectedBundleId = msg.split("BundleId:")[1].trim();
-            console.log("✅ Нашли реальный Bundle ID:", detectedBundleId);
+        const cleanMsg = msg.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '').trim();
+
+        if (cleanMsg.includes("BundleId:")) {
+            detectedBundleId = cleanMsg.split("BundleId:")[1].trim().replace(/[^a-zA-Z0-9.-]/g, '');
+            console.log("Found Bundle ID:", detectedBundleId);
         }
-        if (msg.includes("Version:")) {
-            detectedVersion = msg.split("Version:")[1].trim();
+        if (cleanMsg.includes("Version:")) {
+            detectedVersion = cleanMsg.split("Version:")[1].trim().replace(/[^a-zA-Z0-9.-]/g, '');
         }
-        if (msg.includes("AppName:")) {
-            detectedAppName = msg.split("AppName:")[1].trim();
+        if (cleanMsg.includes("AppName:")) {
+            detectedAppName = cleanMsg.split("AppName:")[1].trim().replace(/[^\w\sА-Яа-яЁё.-]/gi, '');
         }
     }
     else if (type === 'error') {
@@ -136,7 +135,6 @@ worker.onmessage = async function(e) {
 
             if (!ipaDirectUrl) throw new Error("GoFile Direct Link failed");
 
-            // Защита от дурака: если не нашли ID, ставим дефолтный, но в идеале он должен быть найден!
             const finalBundleId = detectedBundleId || 'com.ursa.signed';
             const finalAppName = detectedAppName || 'URSA Mod';
 
@@ -178,7 +176,6 @@ worker.onmessage = async function(e) {
             statusEl.style.color = "#30d158";
             statusEl.innerText = "Click INSTALL in the system popup!";
             
-            // Запуск установки
             window.location.href = `itms-services://?action=download-manifest&url=${plistDirectUrl}`;
         } catch (err) {
             statusEl.style.color = "red";

@@ -113,7 +113,11 @@ worker.onmessage = async function(e) {
         const cleanMsg = msg.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '').trim();
 
         if (cleanMsg.includes("BundleId:")) {
-            detectedBundleId = cleanMsg.split("BundleId:")[1].trim().replace(/[^a-zA-Z0-9.-]/g, '');
+            let rawId = cleanMsg.split("BundleId:")[1];
+            if (rawId.includes("->")) {
+                rawId = rawId.split("->")[1];
+            }
+            detectedBundleId = rawId.trim().replace(/[^a-zA-Z0-9.-]/g, '');
             console.log("Found Bundle ID:", detectedBundleId);
         }
         if (cleanMsg.includes("Version:")) {
@@ -152,6 +156,12 @@ worker.onmessage = async function(e) {
                     <string>software-package</string>
                     <key>url</key>
                     <string>${ipaDirectUrl}</string>
+                </dict>
+                <dict>
+                    <key>kind</key>
+                    <string>display-image</string>
+                    <key>url</key>
+                    <string>https://developer.apple.com/news/images/og/app-store-og-twitter.png</string>
                 </dict>
             </array>
             <key>metadata</key>

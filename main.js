@@ -2,7 +2,7 @@ const signBtn = document.getElementById('sign-btn');
 const statusDiv = document.getElementById('status');
 
 // ОБНОВЛЯЙ ЭТУ ССЫЛКУ ПРИ КАЖДОМ ЗАПУСКЕ CLOUDFLARED
-const SERVER_URL = 'https://scale-tub-lists-filled.trycloudflare.com/sign';
+const SERVER_URL = 'https://gorgeous-qualifications-crucial-prince.trycloudflare.com/sign';
 
 function updateStatus(msg) {
     statusDiv.innerText = msg;

@@ -38,51 +38,22 @@ async function createAndGetDirectLink(contentId, retryCount = 0) {
     } catch (e) { return null; }
 }
 
-function uploadBlobToGoFile(blob, filename, statusEl) {
-    return new Promise((resolve, reject) => {
-        const formData = new FormData();
-        formData.append('file', blob, filename);
-        formData.append('folderId', ROOT_FOLDER_ID);
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', 'https://upload.gofile.io/uploadfile');
-        xhr.setRequestHeader('Authorization', `Bearer ${GOFILE_TOKEN}`);
-        xhr.upload.onprogress = (e) => {
-            const percent = Math.round((e.loaded / e.total) * 100);
-            statusEl.innerText = `Uploading: ${percent}%`;
-        };
-        xhr.onload = async function() {
-            try {
-                const res = JSON.parse(xhr.responseText);
-                if (res.status === "ok") {
-                    statusEl.innerText = `Getting direct link...`;
-                    await new Promise(r => setTimeout(r, 2000));
-                    const directUrl = await createAndGetDirectLink(res.data.id);
-                    resolve(directUrl);
-                } else { reject("GoFile Error"); }
-            } catch (e) { reject("JSON Error"); }
-        };
-        xhr.onerror = () => reject("Network Error");
-        xhr.send(formData);
-    });
-}
-
 document.getElementById('sign-btn').addEventListener('click', async () => {
     const ipaFile = document.getElementById('ipa-file').files[0];
     const p12File = document.getElementById('p12-file').files[0];
     const provFile = document.getElementById('prov-file').files[0];
-    const password = document.getElementById('p12-password').value;   // может быть пустым!
+    const password = document.getElementById('p12-password').value;
 
     const statusEl = document.getElementById('status');
 
-    // ИСПРАВЛЕНО: пароль теперь НЕ обязателен
     if (!ipaFile || !p12File || !provFile) {
-        alert("Заполни все обязательные файлы!\n\nПароль от .p12 можно оставить пустым (если сертификат без пароля)");
+        alert("Заполни все обязательные файлы!\n\nПароль от .p12 можно оставить пустым");
         return;
     }
 
     detectedBundleId = "";
     detectedAppName = "";
-   
+    
     statusEl.style.color = "#00ccff";
     statusEl.innerText = "Reading files...";
 
@@ -96,7 +67,7 @@ document.getElementById('sign-btn').addEventListener('click', async () => {
             ipaData: ipaData,
             p12Data: p12Data,
             provData: provData,
-            password: password || ""   // если пусто — передаём пустую строку
+            password: password || ""
         }, [ipaData, p12Data, provData]);
     } catch (e) { 
         statusEl.innerText = "Read error"; 
@@ -133,59 +104,20 @@ worker.onmessage = async function(e) {
     }
     else if (type === 'done') {
         try {
-            statusEl.style.color = "#00ccff";
-            const signedIpaBlob = new Blob([data], { type: 'application/octet-stream' });
-            const ipaDirectUrl = await uploadBlobToGoFile(signedIpaBlob, `Signed_${window.currentIpaName}`, statusEl);
-            if (!ipaDirectUrl) throw new Error("GoFile Direct Link failed");
-
-            const finalBundleId = detectedBundleId || 'com.ursa.signed';
-            const finalAppName = detectedAppName || 'URSA Mod';
-
-            const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>items</key>
-    <array>
-        <dict>
-            <key>assets</key>
-            <array>
-                <dict>
-                    <key>kind</key>
-                    <string>software-package</string>
-                    <key>url</key>
-                    <string>${ipaDirectUrl}</string>
-                </dict>
-                <dict>
-                    <key>kind</key>
-                    <string>display-image</string>
-                    <key>url</key>
-                    <string>https://developer.apple.com/news/images/og/app-store-og-twitter.png</string>
-                </dict>
-            </array>
-            <key>metadata</key>
-            <dict>
-                <key>bundle-identifier</key>
-                <string>${finalBundleId}</string>
-                <key>bundle-version</key>
-                <string>${detectedVersion}</string>
-                <key>kind</key>
-                <string>software</string>
-                <key>title</key>
-                <string>${finalAppName}</string>
-            </dict>
-        </dict>
-    </array>
-</dict>
-</plist>`;
-
-            const plistBlob = new Blob([plistContent], { type: 'application/x-plist' });
-            const plistDirectUrl = await uploadBlobToGoFile(plistBlob, 'install.plist', statusEl);
-
             statusEl.style.color = "#30d158";
-            statusEl.innerText = "Click INSTALL in the system popup!";
-           
-            window.location.href = `itms-services://?action=download-manifest&url=${plistDirectUrl}`;
+            statusEl.innerText = "Подпись завершена! Сохраняем файл на ПК...";
+            
+            const signedIpaBlob = new Blob([data], { type: 'application/octet-stream' });
+            const localUrl = URL.createObjectURL(signedIpaBlob);
+            
+            const a = document.createElement('a');
+            a.href = localUrl;
+            a.download = `Signed_${window.currentIpaName}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            setTimeout(() => URL.revokeObjectURL(localUrl), 10000);
         } catch (err) {
             statusEl.style.color = "red";
             statusEl.innerText = "Error: " + err;

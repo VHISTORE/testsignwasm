@@ -28,6 +28,7 @@ self.onmessage = async function(e) {
             '-m', 'prov.mobileprovision', 
             '-f', 
             '-z', '9',
+            '-b', 'app.raspberry9732.test9663',
             '-o', 'signed.ipa', 
             'app.ipa'
         ];

@@ -1,7 +1,7 @@
 const signBtn = document.getElementById('sign-btn');
 const statusDiv = document.getElementById('status');
 
-// ТВОЯ ССЫЛКА ИЗ ТЕРМИНАЛА CLOUDFLARE (меняй её, если она обновится)
+// ОБНОВЛЯЙ ЭТУ ССЫЛКУ ПРИ КАЖДОМ ЗАПУСКЕ CLOUDFLARED
 const SERVER_URL = 'https://scale-tub-lists-filled.trycloudflare.com/sign';
 
 function updateStatus(msg) {
@@ -20,17 +20,16 @@ signBtn.onclick = async () => {
         return;
     }
 
-    // Блокируем интерфейс
     signBtn.disabled = true;
     signBtn.style.opacity = "0.5";
-    updateStatus("🚀 Загрузка на Mac и подпись... \n(Не закрывай вкладку)");
+    updateStatus("🚀 Отправка на MacBook... \nПодпись и создание ссылки установки...");
 
     const formData = new FormData();
     formData.append('ipa', ipaFile);
     formData.append('p12', p12File);
     formData.append('prov', provFile);
     formData.append('password', password);
-    // BundleID можно добавить через доп. инпут, если нужно
+    formData.append('bundleId', 'com.ursa.test.app'); // Можно добавить инпут для этого
 
     try {
         const response = await fetch(SERVER_URL, {
@@ -43,22 +42,15 @@ signBtn.onclick = async () => {
             throw new Error(errorText);
         }
 
-        updateStatus("✅ Готово! Начинаю скачивание...");
+        const result = await response.json();
 
-        // Получаем подписанный файл
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        
-        // Автоматическое скачивание
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Signed_${ipaFile.name}`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        a.remove();
-
-        updateStatus("✨ Успешно подписано и скачано!");
+        if (result.installUrl) {
+            updateStatus("✅ Готово! Сейчас появится запрос на установку.");
+            // Переход по протоколу itms-services вызывает системное окно iOS
+            window.location.href = result.installUrl;
+        } else {
+            throw new Error("Сервер не вернул ссылку на установку.");
+        }
 
     } catch (err) {
         updateStatus(`❌ Ошибка: ${err.message}`);

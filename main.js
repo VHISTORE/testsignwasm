@@ -81,6 +81,10 @@ document.getElementById('sign-btn').addEventListener('click', async () => {
         alert("Fill all fields!"); return;
     }
 
+    // Сбрасываем старые значения перед новой подписью
+    detectedBundleId = "";
+    detectedAppName = "";
+    
     statusEl.style.color = "#00ccff";
     statusEl.innerText = "Reading files...";
 
@@ -105,11 +109,21 @@ worker.onmessage = async function(e) {
 
     if (type === 'status') {
         statusEl.innerText = msg;
-        // Тщательно выцепляем данные из логов
-        if (msg.includes("BundleId:")) detectedBundleId = msg.split("BundleId:")[1].trim().split(" ")[0];
-        if (msg.includes("Version:")) detectedVersion = msg.split("Version:")[1].trim().split(" ")[0];
-        if (msg.includes("AppName:")) detectedAppName = msg.split("AppName:")[1].trim();
     } 
+    else if (type === 'stdout') {
+        // ВОТ ОНО! Читаем логи напрямую из C++
+        console.log("WASM: " + msg);
+        if (msg.includes("BundleId:")) {
+            detectedBundleId = msg.split("BundleId:")[1].trim();
+            console.log("✅ Нашли реальный Bundle ID:", detectedBundleId);
+        }
+        if (msg.includes("Version:")) {
+            detectedVersion = msg.split("Version:")[1].trim();
+        }
+        if (msg.includes("AppName:")) {
+            detectedAppName = msg.split("AppName:")[1].trim();
+        }
+    }
     else if (type === 'error') {
         statusEl.style.color = "red";
         statusEl.innerText = "Error: " + msg;
@@ -122,7 +136,10 @@ worker.onmessage = async function(e) {
 
             if (!ipaDirectUrl) throw new Error("GoFile Direct Link failed");
 
-            // Генерируем максимально совместимый Plist
+            // Защита от дурака: если не нашли ID, ставим дефолтный, но в идеале он должен быть найден!
+            const finalBundleId = detectedBundleId || 'com.ursa.signed';
+            const finalAppName = detectedAppName || 'URSA Mod';
+
             const plistContent = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -142,13 +159,13 @@ worker.onmessage = async function(e) {
             <key>metadata</key>
             <dict>
                 <key>bundle-identifier</key>
-                <string>${detectedBundleId || 'com.ursa.signed'}</string>
+                <string>${finalBundleId}</string>
                 <key>bundle-version</key>
-                <string>${detectedVersion || '1.0'}</string>
+                <string>${detectedVersion}</string>
                 <key>kind</key>
                 <string>software</string>
                 <key>title</key>
-                <string>${detectedAppName || 'URSA Mod'}</string>
+                <string>${finalAppName}</string>
             </dict>
         </dict>
     </array>

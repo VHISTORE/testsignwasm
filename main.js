@@ -2,7 +2,7 @@ const signBtn = document.getElementById('sign-btn');
 const statusDiv = document.getElementById('status');
 
 // ТВОЯ ССЫЛКА ИЗ ТЕРМИНАЛА CLOUDFLARE (меняй её, если она обновится)
-const SERVER_URL = 'https://executive-laid-symbols-prairie.trycloudflare.com/sign';
+const SERVER_URL = 'https://scale-tub-lists-filled.trycloudflare.com/sign';
 
 function updateStatus(msg) {
     statusDiv.innerText = msg;

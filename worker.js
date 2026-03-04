@@ -19,16 +19,17 @@ self.onmessage = async function(e) {
         zsignModule.FS.writeFile('cert.p12', new Uint8Array(p12Data));
         zsignModule.FS.writeFile('prov.mobileprovision', new Uint8Array(provData));
 
-        self.postMessage({ type: 'status', msg: '3/4 Signing (no compression)...' });
+        self.postMessage({ type: 'status', msg: '3/4 Signing (BundleID fix + no compression)...' });
        
         const args = [
-            'app.ipa',                    // IPA первым — важно для стабильности
+            'app.ipa',
             '-k', 'cert.p12',
             '-p', password,
             '-m', 'prov.mobileprovision',
             '-o', 'signed.ipa',
-            '-f',                         // force
-            '-z', '0'                     // БЕЗ СЖАТИЯ — решает проблему с целостностью
+            '-f',
+            '-b', 'com.battle.shoot.dragon',   // ← явно ставим правильный Bundle ID из логов
+            '-z', '0'                          // без сжатия — обязательно для целостности
         ];
        
         zsignModule.callMain(args);

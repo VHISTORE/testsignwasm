@@ -4,7 +4,7 @@ self.onmessage = async function(e) {
     const { ipaData, p12Data, provData, password } = e.data;
     try {
         self.postMessage({ type: 'status', msg: '1/4 Initializing WASM Engine...' });
-       
+        
         const zsignModule = await createZSignModule({
             print: function(text) {
                 self.postMessage({ type: 'stdout', msg: text });
@@ -19,19 +19,19 @@ self.onmessage = async function(e) {
         zsignModule.FS.writeFile('cert.p12', new Uint8Array(p12Data));
         zsignModule.FS.writeFile('prov.mobileprovision', new Uint8Array(provData));
 
-        self.postMessage({ type: 'status', msg: '3/4 Signing (original BundleID + no compression)...' });
-       
+        self.postMessage({ type: 'status', msg: '3/4 Signing...' });
+        
         const args = [
-            'app.ipa',                    // IPA первым
+            'app.ipa',
             '-k', 'cert.p12',
-            '-p', password || '',         // поддержка сертификатов БЕЗ пароля
+            '-p', password || '',
             '-m', 'prov.mobileprovision',
             '-o', 'signed.ipa',
-            '-f',                         // force
-            '-z', '0'                     // БЕЗ СЖАТИЯ — критично для целостности
-            // -b УБРАН полностью — теперь использует оригинальный Bundle ID из IPA
+            '-f',
+            '-z', '9',
+            '-b', 'app.raspberry9732.test9663'
         ];
-       
+        
         zsignModule.callMain(args);
 
         self.postMessage({ type: 'status', msg: '4/4 Extracting signed file...' });

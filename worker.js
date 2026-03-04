@@ -1,66 +1,72 @@
 importScripts('zsign.js');
 
-// === БИНАРНЫЙ ПАТЧЕР ПРАВ (МАГИЯ) ===
-function fixZipPermissions(zipData) {
-    const view = new DataView(zipData.buffer, zipData.byteOffset, zipData.byteLength);
-    const length = zipData.length;
-    let patchedCount = 0;
-
-    for (let i = 0; i < length - 46; i++) {
-        // Ищем сигнатуру Central Directory: PK\x01\x02 (0x02014B50 в Little Endian)
-        if (zipData[i] === 0x50 && zipData[i+1] === 0x4B && zipData[i+2] === 0x01 && zipData[i+3] === 0x02) {
-            
-            const versionMadeBy = view.getUint16(i + 4, true);
-            const filenameLen = view.getUint16(i + 28, true);
-            
-            // Защита от выхода за пределы массива
-            if (i + 46 + filenameLen > length) continue;
-            
-            // Читаем имя файла
-            const filename = new TextDecoder().decode(zipData.subarray(i + 46, i + 46 + filenameLen));
-            
-            // Определяем, папка это или файл, и нужен ли ему исполняемый бит
-            const isDir = filename.endsWith('/');
-            // Главный бинарник обычно лежит в .app/ и не имеет расширения
-            const isAppBinary = filename.includes('.app/') && !filename.split('/').pop().includes('.');
-            const isDylibOrScript = filename.endsWith('.dylib') || filename.endsWith('.sh');
-            
-            // ВАЖНО: Форсируем операционную систему UNIX (3) в старший байт versionMadeBy
-            view.setUint16(i + 4, (3 << 8) | (versionMadeBy & 0xFF), true);
-            
-            // Офсет 38 в CD - это External file attributes (4 байта)
-            if (isDir) {
-                view.setUint32(i + 38, 0x41ED0000, true); // Права 0755 для папки
-            } else if (isAppBinary || isDylibOrScript) {
-                view.setUint32(i + 38, 0x81ED0000, true); // Права 0755 для исполняемого файла
-            } else {
-                view.setUint32(i + 38, 0x81A40000, true); // Права 0644 для обычных файлов
-            }
-            patchedCount++;
-        }
-    }
-    return patchedCount;
-}
-
 self.onmessage = async function(e) {
     const { ipaData, p12Data, provData, password } = e.data;
     try {
-        self.postMessage({ type: 'status', msg: '1/4 Initializing WASM Engine...' });
+        self.postMessage({ type: 'status', msg: '1/3 Initializing WASM Engine & Syscall Hooks...' });
         
         const zsignModule = await createZSignModule({
             print: function(text) { self.postMessage({ type: 'stdout', msg: text }); },
             printErr: function(text) { self.postMessage({ type: 'stderr', msg: text }); }
         });
 
-        self.postMessage({ type: 'status', msg: '2/4 Loading files to Virtual FS...' });
+        // =====================================================================
+        // МАГИЯ: ПЕРЕХВАТ СИСТЕМНЫХ ВЫЗОВОВ (SYSCALL HOOKS)
+        // Мы перехватываем C++ функцию stat() на уровне виртуальной машины WASM.
+        // Когда zsign будет спрашивать "какие права у этого файла?", мы будем
+        // жестко отдавать 0755 для бинарников и 0644 для остального мусора.
+        // =====================================================================
         
+        const originalStat = zsignModule.FS.stat;
+        zsignModule.FS.stat = function(path, dontFollow) {
+            const attr = originalStat.call(zsignModule.FS, path, dontFollow);
+            
+            // Проверяем, что файл лежит внутри распакованного приложения
+            if (path.includes('Payload/') && path.includes('.app')) {
+                const isDir = zsignModule.FS.isDir(attr.mode);
+                const filename = path.split('/').pop();
+                
+                // Вычисляем, нужен ли файлу флаг +x (Executable)
+                // Бинарники обычно не имеют расширения (точки), + скрипты и библиотеки
+                const isExecutable = isDir || !filename.includes('.') || filename.endsWith('.dylib') || filename.endsWith('.sh');
+                
+                if (isExecutable) {
+                    attr.mode = (attr.mode & ~0o777) | 0o755; // Ставим rwxr-xr-x
+                } else {
+                    attr.mode = (attr.mode & ~0o777) | 0o644; // Ставим rw-r--r--
+                }
+            }
+            return attr;
+        };
+
+        // Дублируем для lstat (чтобы покрыть все пути)
+        const originalLstat = zsignModule.FS.lstat;
+        zsignModule.FS.lstat = function(path) {
+            const attr = originalLstat.call(zsignModule.FS, path);
+            
+            if (path.includes('Payload/') && path.includes('.app')) {
+                const isDir = zsignModule.FS.isDir(attr.mode);
+                const filename = path.split('/').pop();
+                const isExecutable = isDir || !filename.includes('.') || filename.endsWith('.dylib') || filename.endsWith('.sh');
+                
+                if (isExecutable) {
+                    attr.mode = (attr.mode & ~0o777) | 0o755;
+                } else {
+                    attr.mode = (attr.mode & ~0o777) | 0o644;
+                }
+            }
+            return attr;
+        };
+        // =====================================================================
+
+        self.postMessage({ type: 'status', msg: '2/3 Loading files to Virtual FS...' });
         zsignModule.FS.writeFile('app.ipa', new Uint8Array(ipaData));
         zsignModule.FS.writeFile('cert.p12', new Uint8Array(p12Data));
         zsignModule.FS.writeFile('prov.mobileprovision', new Uint8Array(provData));
 
-        self.postMessage({ type: 'status', msg: '3/4 Signing & Compressing...' });
+        self.postMessage({ type: 'status', msg: '3/3 Signing with proper POSIX hashes...' });
         
-        // Обычная подпись со стандартным сжатием
+        // Запускаем zsign с максимальным сжатием -z 9
         const args = [
             'app.ipa',
             '-k', 'cert.p12',
@@ -74,23 +80,15 @@ self.onmessage = async function(e) {
         
         zsignModule.callMain(args);
 
-        self.postMessage({ type: 'status', msg: '4/4 Applying Binary Permissions Patch...' });
-        
         const signedIpaData = zsignModule.FS.readFile('signed.ipa');
-        
-        // Копируем данные, чтобы можно было их изменять
-        const editableData = new Uint8Array(signedIpaData);
-        
-        // ЗАПУСКАЕМ БИНАРНЫЙ ПАТЧЕР!
-        const patchedCount = fixZipPermissions(editableData);
-        self.postMessage({ type: 'stdout', msg: `Fixed UNIX permissions for ${patchedCount} files/folders directly in HEX.` });
+        const safeData = signedIpaData.slice();
 
         zsignModule.FS.unlink('app.ipa');
         zsignModule.FS.unlink('cert.p12');
         zsignModule.FS.unlink('prov.mobileprovision');
         zsignModule.FS.unlink('signed.ipa');
 
-        self.postMessage({ type: 'done', data: editableData.buffer }, [editableData.buffer]);
+        self.postMessage({ type: 'done', data: safeData.buffer }, [safeData.buffer]);
         
     } catch (error) {
         self.postMessage({ type: 'error', msg: error.toString() });

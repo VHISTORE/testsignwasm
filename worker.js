@@ -19,17 +19,16 @@ self.onmessage = async function(e) {
         zsignModule.FS.writeFile('cert.p12', new Uint8Array(p12Data));
         zsignModule.FS.writeFile('prov.mobileprovision', new Uint8Array(provData));
 
-        self.postMessage({ type: 'status', msg: '3/4 Signing with Force flags...' });
+        self.postMessage({ type: 'status', msg: '3/4 Signing (no compression)...' });
        
         const args = [
+            'app.ipa',                    // IPA первым — важно для стабильности
             '-k', 'cert.p12',
             '-p', password,
             '-m', 'prov.mobileprovision',
-            '-f',
-            // '-z', '9',          ← убрал (часто ломает подпись)
-            // '-b', 'app.raspberry9732.test9663', ← УБРАЛ! теперь использует оригинальный Bundle ID
             '-o', 'signed.ipa',
-            'app.ipa'
+            '-f',                         // force
+            '-z', '0'                     // БЕЗ СЖАТИЯ — решает проблему с целостностью
         ];
        
         zsignModule.callMain(args);

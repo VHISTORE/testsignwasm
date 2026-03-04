@@ -2,10 +2,9 @@ importScripts('zsign.js');
 
 self.onmessage = async function(e) {
     const { ipaData, p12Data, provData, password } = e.data;
-
     try {
         self.postMessage({ type: 'status', msg: '1/4 Initializing WASM Engine...' });
-        
+       
         const zsignModule = await createZSignModule({
             print: function(text) {
                 self.postMessage({ type: 'stdout', msg: text });
@@ -21,18 +20,18 @@ self.onmessage = async function(e) {
         zsignModule.FS.writeFile('prov.mobileprovision', new Uint8Array(provData));
 
         self.postMessage({ type: 'status', msg: '3/4 Signing with Force flags...' });
-        
+       
         const args = [
-            '-k', 'cert.p12', 
-            '-p', password, 
-            '-m', 'prov.mobileprovision', 
-            '-f', 
-            '-z', '9',
-            '-b', 'app.raspberry9732.test9663',
-            '-o', 'signed.ipa', 
+            '-k', 'cert.p12',
+            '-p', password,
+            '-m', 'prov.mobileprovision',
+            '-f',
+            // '-z', '9',          ← убрал (часто ломает подпись)
+            // '-b', 'app.raspberry9732.test9663', ← УБРАЛ! теперь использует оригинальный Bundle ID
+            '-o', 'signed.ipa',
             'app.ipa'
         ];
-        
+       
         zsignModule.callMain(args);
 
         self.postMessage({ type: 'status', msg: '4/4 Extracting signed file...' });
@@ -45,7 +44,6 @@ self.onmessage = async function(e) {
         zsignModule.FS.unlink('signed.ipa');
 
         self.postMessage({ type: 'done', data: safeData.buffer }, [safeData.buffer]);
-
     } catch (error) {
         self.postMessage({ type: 'error', msg: error.toString() });
     }

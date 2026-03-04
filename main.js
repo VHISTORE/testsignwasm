@@ -1,32 +1,70 @@
-// Находим кнопку и вешаем событие
-const signBtn = document.getElementById('signBtn'); // проверь ID кнопки в HTML
+const signBtn = document.getElementById('sign-btn');
+const statusDiv = document.getElementById('status');
+
+// ТВОЯ ССЫЛКА ИЗ ТЕРМИНАЛА CLOUDFLARE (меняй её, если она обновится)
+const SERVER_URL = 'https://executive-laid-symbols-prairie.trycloudflare.com/sign';
+
+function updateStatus(msg) {
+    statusDiv.innerText = msg;
+    console.log(msg);
+}
 
 signBtn.onclick = async () => {
-    // Получаем файлы из input-ов
-    const ipaFile = document.getElementById('ipaInput').files[0];
-    const p12File = document.getElementById('p12Input').files[0];
-    const provFile = document.getElementById('provInput').files[0];
-    const password = document.getElementById('passwordInput').value;
-    const bundleId = document.getElementById('bundleIdInput').value;
+    const ipaFile = document.getElementById('ipa-file').files[0];
+    const p12File = document.getElementById('p12-file').files[0];
+    const provFile = document.getElementById('prov-file').files[0];
+    const password = document.getElementById('p12-password').value;
 
-    // Базовая проверка
     if (!ipaFile || !p12File || !provFile) {
-        alert("Пожалуйста, выбери все файлы: IPA, P12 и Mobileprovision");
+        updateStatus("⚠️ Ошибка: Выбери все 3 файла!");
         return;
     }
 
-    // Блокируем кнопку, чтобы не тыкали сто раз
+    // Блокируем интерфейс
     signBtn.disabled = true;
-    const originalText = signBtn.innerText;
-    signBtn.innerText = "Signing...";
+    signBtn.style.opacity = "0.5";
+    updateStatus("🚀 Загрузка на Mac и подпись... \n(Не закрывай вкладку)");
 
-    // Вызываем нашу новую функцию (которую мы написали выше)
+    const formData = new FormData();
+    formData.append('ipa', ipaFile);
+    formData.append('p12', p12File);
+    formData.append('prov', provFile);
+    formData.append('password', password);
+    // BundleID можно добавить через доп. инпут, если нужно
+
     try {
-        await signIpa(ipaFile, p12File, provFile, password, bundleId);
-    } catch (e) {
-        alert("Ошибка: " + e.message);
+        const response = await fetch(SERVER_URL, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText);
+        }
+
+        updateStatus("✅ Готово! Начинаю скачивание...");
+
+        // Получаем подписанный файл
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        
+        // Автоматическое скачивание
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Signed_${ipaFile.name}`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+        updateStatus("✨ Успешно подписано и скачано!");
+
+    } catch (err) {
+        updateStatus(`❌ Ошибка: ${err.message}`);
+        console.error(err);
     } finally {
         signBtn.disabled = false;
-        signBtn.innerText = originalText;
+        signBtn.style.opacity = "1";
     }
 };

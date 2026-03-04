@@ -1,6 +1,6 @@
 const worker = new Worker('worker.js');
-const GOFILE_TOKEN = "1CXC2VQ263Z4TctNDGiWkE935MnTki35"; 
-const ROOT_FOLDER_ID = "f6473757-cc2b-42b4-bb4e-99d4b8d3429c"; 
+const GOFILE_TOKEN = "1CXC2VQ263Z4TctNDGiWkE935MnTki35";
+const ROOT_FOLDER_ID = "f6473757-cc2b-42b4-bb4e-99d4b8d3429c";
 
 let detectedBundleId = "";
 let detectedVersion = "1.0";
@@ -43,16 +43,13 @@ function uploadBlobToGoFile(blob, filename, statusEl) {
         const formData = new FormData();
         formData.append('file', blob, filename);
         formData.append('folderId', ROOT_FOLDER_ID);
-
         const xhr = new XMLHttpRequest();
         xhr.open('POST', 'https://upload.gofile.io/uploadfile');
         xhr.setRequestHeader('Authorization', `Bearer ${GOFILE_TOKEN}`);
-
         xhr.upload.onprogress = (e) => {
             const percent = Math.round((e.loaded / e.total) * 100);
             statusEl.innerText = `Uploading: ${percent}%`;
         };
-
         xhr.onload = async function() {
             try {
                 const res = JSON.parse(xhr.responseText);
@@ -73,16 +70,19 @@ document.getElementById('sign-btn').addEventListener('click', async () => {
     const ipaFile = document.getElementById('ipa-file').files[0];
     const p12File = document.getElementById('p12-file').files[0];
     const provFile = document.getElementById('prov-file').files[0];
-    const password = document.getElementById('p12-password').value;
+    const password = document.getElementById('p12-password').value;   // может быть пустым!
+
     const statusEl = document.getElementById('status');
 
-    if (!ipaFile || !p12File || !provFile || !password) {
-        alert("Fill all fields!"); return;
+    // ИСПРАВЛЕНО: пароль теперь НЕ обязателен
+    if (!ipaFile || !p12File || !provFile) {
+        alert("Заполни все обязательные файлы!\n\nПароль от .p12 можно оставить пустым (если сертификат без пароля)");
+        return;
     }
 
     detectedBundleId = "";
     detectedAppName = "";
-    
+   
     statusEl.style.color = "#00ccff";
     statusEl.innerText = "Reading files...";
 
@@ -96,9 +96,11 @@ document.getElementById('sign-btn').addEventListener('click', async () => {
             ipaData: ipaData,
             p12Data: p12Data,
             provData: provData,
-            password: password
+            password: password || ""   // если пусто — передаём пустую строку
         }, [ipaData, p12Data, provData]);
-    } catch (e) { statusEl.innerText = "Read error"; }
+    } catch (e) { 
+        statusEl.innerText = "Read error"; 
+    }
 });
 
 worker.onmessage = async function(e) {
@@ -107,16 +109,14 @@ worker.onmessage = async function(e) {
 
     if (type === 'status') {
         statusEl.innerText = msg;
-    } 
+    }
     else if (type === 'stdout') {
         console.log("WASM: " + msg);
         const cleanMsg = msg.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '').trim();
 
         if (cleanMsg.includes("BundleId:")) {
             let rawId = cleanMsg.split("BundleId:")[1];
-            if (rawId.includes("->")) {
-                rawId = rawId.split("->")[1];
-            }
+            if (rawId.includes("->")) rawId = rawId.split("->")[1];
             detectedBundleId = rawId.trim().replace(/[^a-zA-Z0-9.-]/g, '');
             console.log("Found Bundle ID:", detectedBundleId);
         }
@@ -130,13 +130,12 @@ worker.onmessage = async function(e) {
     else if (type === 'error') {
         statusEl.style.color = "red";
         statusEl.innerText = "Error: " + msg;
-    } 
+    }
     else if (type === 'done') {
         try {
             statusEl.style.color = "#00ccff";
             const signedIpaBlob = new Blob([data], { type: 'application/octet-stream' });
             const ipaDirectUrl = await uploadBlobToGoFile(signedIpaBlob, `Signed_${window.currentIpaName}`, statusEl);
-
             if (!ipaDirectUrl) throw new Error("GoFile Direct Link failed");
 
             const finalBundleId = detectedBundleId || 'com.ursa.signed';
@@ -185,7 +184,7 @@ worker.onmessage = async function(e) {
 
             statusEl.style.color = "#30d158";
             statusEl.innerText = "Click INSTALL in the system popup!";
-            
+           
             window.location.href = `itms-services://?action=download-manifest&url=${plistDirectUrl}`;
         } catch (err) {
             statusEl.style.color = "red";

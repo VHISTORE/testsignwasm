@@ -1,42 +1,32 @@
-async function signIpa(ipaFile, p12File, provFile, password, bundleId) {
-    const SERVER_URL = 'https://executive-laid-symbols-prairie.trycloudflare.com/sign';
-    
-    // Создаем FormData — это единственный способ передать бинарные файлы на сервер
-    const formData = new FormData();
-    formData.append('ipa', ipaFile);
-    formData.append('p12', p12File);
-    formData.append('prov', provFile);
-    formData.append('password', password);
-    formData.append('bundleId', bundleId);
+// Находим кнопку и вешаем событие
+const signBtn = document.getElementById('signBtn'); // проверь ID кнопки в HTML
 
-    updateStatus('Uploading and signing... Please wait.');
+signBtn.onclick = async () => {
+    // Получаем файлы из input-ов
+    const ipaFile = document.getElementById('ipaInput').files[0];
+    const p12File = document.getElementById('p12Input').files[0];
+    const provFile = document.getElementById('provInput').files[0];
+    const password = document.getElementById('passwordInput').value;
+    const bundleId = document.getElementById('bundleIdInput').value;
 
-    try {
-        const response = await fetch(SERVER_URL, {
-            method: 'POST',
-            body: formData
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Server error: ${errorText}`);
-        }
-
-        // Получаем подписанный файл как Blob
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        
-        // Создаем скрытую ссылку для скачивания
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `Signed_${ipaFile.name}`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        
-        updateStatus('Success! File downloaded.');
-    } catch (err) {
-        console.error(err);
-        updateStatus(`Error: ${err.message}`);
+    // Базовая проверка
+    if (!ipaFile || !p12File || !provFile) {
+        alert("Пожалуйста, выбери все файлы: IPA, P12 и Mobileprovision");
+        return;
     }
-}
+
+    // Блокируем кнопку, чтобы не тыкали сто раз
+    signBtn.disabled = true;
+    const originalText = signBtn.innerText;
+    signBtn.innerText = "Signing...";
+
+    // Вызываем нашу новую функцию (которую мы написали выше)
+    try {
+        await signIpa(ipaFile, p12File, provFile, password, bundleId);
+    } catch (e) {
+        alert("Ошибка: " + e.message);
+    } finally {
+        signBtn.disabled = false;
+        signBtn.innerText = originalText;
+    }
+};
